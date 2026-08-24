@@ -271,22 +271,90 @@ def create_post_area(post_frame, history_frame):
         pady=(0, 10)
     )
 
-    def send_message():
+    countdown_label = tk.Label(post_frame, text="")
+    countdown_label.pack()
+
+    # Store the scheduled callback ID so the pending send can be cancelled.
+    pending_send_id = None
+
+    def finish_send():
+        nonlocal pending_send_id
+        pending_send_id = None
+
         title = title_entry.get()
         message = message_text.get("1.0", "end-1c")
 
         database.create_message(title, message)
 
+        title_entry.configure(state="normal")
+        message_text.configure(state="normal")
         title_entry.delete(0, "end")
         message_text.delete("1.0", "end")
 
         load_messages(history_frame)
+        countdown_label.configure(text="")
+        send_button.configure(text="Send", command=start_delayed_send)
 
+    def update_countdown(seconds_left):
+        """Update the label once per second, then complete the send."""
+        nonlocal pending_send_id
+
+        if seconds_left == 0:
+            finish_send()
+            return
+
+        countdown_label.configure(text=f"Sending in {seconds_left}...")
+        pending_send_id = post_frame.after(
+            1000,
+            update_countdown,
+            seconds_left - 1
+        )
+
+    def start_delayed_send():
+        # Ignore additional send attempts while a countdown is already active.
+        if pending_send_id is not None:
+            return
+        # ensure messages cannot be sent with no content
+        title = title_entry.get().strip()
+        message = message_text.get("1.0", "end-1c").strip()
+        if title == "" or message == "":
+            return
+
+        # Lock the inputs so the pending message cannot change before sending.
+        title_entry.configure(state="disabled")
+        message_text.configure(state="disabled")
+        send_button.configure(text="Cancel", command=cancel_send)
+        update_countdown(3)
+
+    def cancel_send():
+        """Stop the scheduled send and restore the input controls."""
+        nonlocal pending_send_id
+
+        if pending_send_id is not None:
+            post_frame.after_cancel(pending_send_id)
+            pending_send_id = None
+
+        title_entry.configure(state="normal")
+        message_text.configure(state="normal")
+        countdown_label.configure(text="")
+        send_button.configure(text="Send", command=start_delayed_send)
+
+    def send_with_enter(event):
+        start_delayed_send()
+        # Prevent Tkinter from also inserting a newline for a normal Enter.
+        return "break"
+
+    def insert_new_line(event):
+        message_text.insert(tk.INSERT, "\n")
+        return "break"
+
+    message_text.bind("<Return>", send_with_enter)
+    message_text.bind("<Shift-Return>", insert_new_line)
 
     send_button = tk.Button(
         post_frame,
         text="Send",
-        command=send_message
+        command=start_delayed_send
     )
 
     send_button.pack()
