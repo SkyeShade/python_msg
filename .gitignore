@@ -1,0 +1,10 @@
+# Local secrets (copy credentials.example.json and fill in the values)
+credentials.json
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+
+# IDE
+.idea/
